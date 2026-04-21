@@ -1,9 +1,9 @@
 name: KOSPI G-ensemble Bot
 
 on:
-  schedule:
-    # 매일 01:40 UTC (한국 시간 10:40) 실행
-    - cron: '40 1 * * *'
+#  schedule:
+#    # 매일 01:40 UTC (한국 시간 10:40) 실행
+#    - cron: '40 1 * * *'
   workflow_dispatch: # 수동 실행 버튼 활성화
 
 jobs:
