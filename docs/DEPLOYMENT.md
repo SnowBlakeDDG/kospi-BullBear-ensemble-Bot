@@ -96,3 +96,24 @@ gcloud scheduler jobs create http g-ensemble-bot-token-job `
 | 2026-04-22 | logic-v1.8_spec-v1 | `sd_fetcher` 버그 수정 및 최신 `Holiday/Bullet` 로직 반영. |
 | 2026-04-24 | feat-logic-v1-8-final | v1.8 정밀 알고리즘 최종 반영 및 GCP `/tmp` 경로 최적화 완료. |
 | 2026-04-24 | feat-kis-futures-v1-0 | KIS API 연동(현물/선물), GlobalFetcher(VIX/DXY) 추가, 토큰 갱신 스케줄러 분리 배포. |
+| 2026-07-12 | ga-migration-v1-0 | **GCP → GitHub Actions 마이그레이션**. cron 09:10 KST, BOM 방어 로직, Secrets 5개 등록. |
+
+## 🔀 GitHub Actions 운영 가이드 (2026-07-12~)
+
+### 인프라 전환 요약
+- **기존**: GCP Cloud Functions Gen2 + Cloud Scheduler (09:10 / 06:00 KST)
+- **현재**: GitHub Actions cron (`'10 0 * * *'` = 09:10 KST) + `workflow_dispatch`
+- **06시 토큰 갱신**: 불필요 (GA에서는 매 실행 시 KIS 토큰 신규 발급)
+
+### Secrets 관리
+GitHub repo → Settings → Secrets → Actions에서 관리. `gh` CLI로도 가능:
+```powershell
+# BOM 방지: 반드시 --body 옵션 사용 (파이프 금지!)
+gh secret set SECRET_NAME --repo SnowBlakeDDG/kospi-BullBear-ensemble-Bot --body "VALUE"
+```
+
+### 수동 실행
+```powershell
+gh workflow run "KOSPI G-ensemble Bot" --repo SnowBlakeDDG/kospi-BullBear-ensemble-Bot --ref main
+```
+
