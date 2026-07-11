@@ -1,11 +1,35 @@
+# === Secrets & Env ===
 .env
+.env.tmp
+env_vars.yaml
+
+# === Python ===
 __pycache__/
 *.py[cod]
 *$py.class
 .venv/
 venv/
 ENV/
-data/
-*.log
+
+# === IDE ===
 .vscode/
 .idea/
+.agents/
+
+# === Data & Logs ===
+data/
+*.log
+
+# === Scratch / Test JSON (대용량) ===
+detail_*.json
+player_response*.json
+scratch_*.json
+
+# === GCP 전용 ===
+.gcloudignore
+
+# === KIS API 토큰 / 테스트 ===
+KIS_open_api_test/kis_token.txt
+test_*.py
+
+
