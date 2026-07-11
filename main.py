@@ -18,7 +18,7 @@ from datetime import datetime
 
 # 1. 환경 변수 로드
 load_dotenv()
-DISCORD_URL = os.getenv('DISCORD_WEBHOOK_URL')
+DISCORD_URL = os.getenv('DISCORD_WEBHOOK_URL', '').strip().replace('\ufeff', '')
 
 def main():
     print("--- G-ensemble KOSPI Analysis Start ---")
