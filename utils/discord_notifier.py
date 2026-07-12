@@ -213,13 +213,20 @@ class DiscordNotifier:
             "inline": False
         })
         
-        # 영상 출처
+        # 영상 출처 — 제목 기반 하이퍼링크
         yt_title = report_data.get('yt_title', 'N/A')
         yt_url = report_data.get('yt_url', '')
-        if yt_url and yt_url != 'N/A':
-            source_text = f"[{yt_title}]({yt_url})"
+        
+        # Discord 마크다운 링크 호환을 위한 제목 정제
+        import html as _html
+        clean_title = _html.unescape(yt_title)  # HTML 엔티티 디코딩 (&#39; → ')
+        for ch in ['[', ']', '(', ')']:          # 마크다운 링크 구문 깨짐 방지
+            clean_title = clean_title.replace(ch, f'\\{ch}')
+        
+        if yt_url and yt_url != 'N/A' and clean_title != 'N/A':
+            source_text = f"[📺 {clean_title}]({yt_url})"
         else:
-            source_text = yt_title
+            source_text = clean_title
         
         fields.append({
             "name": "📺 분석 영상",
