@@ -8,11 +8,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class YTAnalyzer:
-    def __init__(self, model_name='gemini-2.5-flash'): 
+    def __init__(self, model_name='gemini-3.5-flash'): 
         self.api_key = os.getenv('GEMINI_API_KEY')
         self.client = genai.Client(api_key=self.api_key) if self.api_key else None
         self.model_name = model_name
-        self.fallback_model = 'gemini-2.5-flash-lite' 
+        self.fallback_model = 'gemini-2.5-flash' 
         self.channel_url = 'https://www.youtube.com/@moneydo/videos'
         self._cached_title = None  # 게스트 필터링 시 제목 캐시
 
