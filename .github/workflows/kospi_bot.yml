@@ -1,10 +1,11 @@
 name: KOSPI G-ensemble Bot
 
 on:
-  schedule:
-    # 매일 00:10 UTC (한국 시간 09:10) 실행
-    - cron: '10 0 * * *'
-  workflow_dispatch: # 수동 실행 버튼 활성화
+  # [비활성화 2026-07-25] GCP Cloud Run Always Free 티어로 운영 전환.
+  # 자동 스케줄 실행은 GCP Cloud Scheduler가 담당.
+  # schedule:
+  #   - cron: '10 0 * * *'
+  workflow_dispatch: # 수동 실행 버튼 (테스트용 유지)
 
 jobs:
   run-bot:

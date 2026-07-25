@@ -19,9 +19,11 @@
 
 ## 🚀 최신 표준 배포 프로세스 (2026-04-24 업데이트)
 
-### ⚠️ 인프라 통합 알림 (2026-04-22)
-- **스케줄러 단일화**: GitHub Actions 스케줄러 사용을 중단하고, 모든 정기 실행은 **GCP Cloud Scheduler(09:10 KST)**로 통합되었습니다.
-- **배포 방식**: 배포는 로컬 또는 CI 환경에서 `gcloud` 명령어를 통해 수행하며, 리비전 레이블을 반드시 첨부하십시오.
+### ⚠️ 인프라 운영 현황 (2026-07-25 업데이트)
+- **실행 환경**: **GCP Cloud Run (Always Free 티어)** — Cloud Scheduler(09:10 KST)로 정기 실행.
+- **GitHub Actions**: cron 스케줄 **비활성화** (2026-07-25). `workflow_dispatch`(수동 실행)만 유지.
+- **GitHub**: 버전 관리(소스코드) 전용. Secrets 5개는 수동 테스트용으로 잔존.
+- **배포 방식**: 로컬에서 `gcloud` 명령어를 통해 배포하며, 리비전 레이블을 반드시 첨부할 것.
 
 KIS API 도입 및 토큰 갱신 이원화에 따른 최신 배포 절차입니다.
 
@@ -97,12 +99,14 @@ gcloud scheduler jobs create http g-ensemble-bot-token-job `
 | 2026-04-24 | feat-logic-v1-8-final | v1.8 정밀 알고리즘 최종 반영 및 GCP `/tmp` 경로 최적화 완료. |
 | 2026-04-24 | feat-kis-futures-v1-0 | KIS API 연동(현물/선물), GlobalFetcher(VIX/DXY) 추가, 토큰 갱신 스케줄러 분리 배포. |
 | 2026-07-12 | ga-migration-v1-0 | **GCP → GitHub Actions 마이그레이션**. cron 09:10 KST, BOM 방어 로직, Secrets 5개 등록. |
+| 2026-07-25 | — | **GA cron 비활성화**, GCP Cloud Run Always Free 티어로 운영 복귀. GitHub은 버전 관리 전용. |
 
-## 🔀 GitHub Actions 운영 가이드 (2026-07-12~)
+## 🔀 GitHub Actions 운영 가이드 (2026-07-12~ / 비활성화: 2026-07-25)
 
 ### 인프라 전환 요약
-- **기존**: GCP Cloud Functions Gen2 + Cloud Scheduler (09:10 / 06:00 KST)
-- **현재**: GitHub Actions cron (`'10 0 * * *'` = 09:10 KST) + `workflow_dispatch`
+- **Phase 1** (~ 2026-07-12): GCP Cloud Functions Gen2 + Cloud Scheduler (09:10 / 06:00 KST)
+- **Phase 2** (2026-07-12 ~ 07-25): GitHub Actions cron (`'10 0 * * *'` = 09:10 KST)
+- **Phase 3** (2026-07-25~): **GCP Cloud Run Always Free 복귀**. GA cron 비활성화, GitHub은 VCS 전용
 - **06시 토큰 갱신**: 불필요 (GA에서는 매 실행 시 KIS 토큰 신규 발급)
 
 ### Secrets 관리
