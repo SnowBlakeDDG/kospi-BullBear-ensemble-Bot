@@ -31,5 +31,6 @@ scratch_*.json
 # === KIS API 토큰 / 테스트 ===
 KIS_open_api_test/kis_token.txt
 test_*.py
+!test_runner.py
 
 

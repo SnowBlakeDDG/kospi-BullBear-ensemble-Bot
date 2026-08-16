@@ -62,20 +62,16 @@ gcloud functions deploy g-ensemble-bot `
 Remove-Item env_vars.yaml
 ```
 
-### 2. Cloud Scheduler 이원화 설정
-메인 분석(09:10)과 토큰 갱신(06:00) 두 개의 잡(Job)을 운영합니다.
+### 2. Cloud Scheduler 정기 실행 설정 (09:10 KST)
+KIS API 토큰은 매 실행 시 자동 발급되므로 06시 별도 잡 없이 **09:10 메인 분석 잡만 단일 운영**합니다.
 
 ```powershell
 # 함수 URI 추출
 $uri = (gcloud functions describe g-ensemble-bot --region=asia-northeast3 --format='value(serviceConfig.uri)')
 
-# 메인 분석 (09:10 KST)
-gcloud scheduler jobs create http g-ensemble-bot-job `
+# 메인 분석 (매일 09:10 KST)
+gcloud scheduler jobs update http g-ensemble-bot-job `
     --schedule="10 9 * * *" --time-zone="Asia/Seoul" --uri=$uri --http-method=GET --location=asia-northeast3
-
-# KIS 토큰 갱신 (06:00 KST)
-gcloud scheduler jobs create http g-ensemble-bot-token-job `
-    --schedule="0 6 * * *" --time-zone="Asia/Seoul" --uri="$uri/kis_token_handler" --http-method=GET --location=asia-northeast3
 ```
 
 ## ⚠️ 트러블슈팅 (Troubleshooting)

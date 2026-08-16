@@ -39,20 +39,15 @@ gcloud functions deploy $FUNCTION_NAME \
 # 보안을 위해 생성된 파일 삭제
 rm $ENV_FILE
 
-echo "--- Setting up Cloud Scheduler ---"
+echo "--- Setting up Cloud Scheduler (09:10 KST) ---"
 # URI 자동 추출
 URI=$(gcloud functions describe $FUNCTION_NAME --region=$REGION --format='value(serviceConfig.uri)')
 
-# 메인 분석 잡 (09:10)
+# 메인 분석 잡 (09:10 KST)
 gcloud scheduler jobs update http $FUNCTION_NAME-job \
     --location=$REGION \
     --uri=$URI \
-    --schedule="10 9 * * *"
-
-# 토큰 갱신 잡 (06:00)
-gcloud scheduler jobs update http $FUNCTION_NAME-token-job \
-    --location=$REGION \
-    --uri="$URI/kis_token_handler" \
-    --schedule="0 6 * * *"
+    --schedule="10 9 * * *" \
+    --time-zone="Asia/Seoul"
 
 echo "--- Deployment Finished! ---"
