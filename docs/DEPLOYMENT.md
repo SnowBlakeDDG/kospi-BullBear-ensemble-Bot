@@ -101,6 +101,7 @@ gcloud scheduler jobs create http g-ensemble-bot-token-job `
 | 2026-07-12 | ga-migration-v1-0 | **GCP → GitHub Actions 마이그레이션**. cron 09:10 KST, BOM 방어 로직, Secrets 5개 등록. |
 | 2026-07-25 | — | **GA cron 비활성화**, GCP Cloud Run Always Free 티어로 운영 복귀. GitHub은 버전 관리 전용. |
 | 2026-08-16 | feat-model-3-7-flash-v1 | AI 모델 업그레이드: 주력 `gemini-3.7-flash`, 폴백 `gemini-3.6-flash`. |
+| 2026-08-16 | feat-python314-v1 | **Python 3.14 마이그레이션**: Python 3.10 EOL 대비 종속성 영향평가 완료, GA/GCP 런타임 3.14 갱신. |
 
 ## 🔀 GitHub Actions 운영 가이드 (2026-07-12~ / 비활성화: 2026-07-25)
 

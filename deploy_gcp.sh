@@ -22,9 +22,11 @@ done
 
 echo "--- Deploying G-ensemble to GCP Cloud Functions (2nd Gen) ---"
 
+RUNTIME=${PYTHON_RUNTIME:-python314}
+
 gcloud functions deploy $FUNCTION_NAME \
     --gen2 \
-    --runtime=python310 \
+    --runtime=$RUNTIME \
     --region=$REGION \
     --source=. \
     --entry-point=$ENTRY_POINT \
@@ -32,7 +34,7 @@ gcloud functions deploy $FUNCTION_NAME \
     --allow-unauthenticated \
     --env-vars-file=$ENV_FILE \
     --timeout=120s \
-    --update-labels=version=feat-ensemble-v2-0
+    --update-labels=version=feat-python314-v1
 
 # 보안을 위해 생성된 파일 삭제
 rm $ENV_FILE
