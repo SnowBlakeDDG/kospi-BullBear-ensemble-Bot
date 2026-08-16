@@ -100,6 +100,7 @@ gcloud scheduler jobs create http g-ensemble-bot-token-job `
 | 2026-04-24 | feat-kis-futures-v1-0 | KIS API 연동(현물/선물), GlobalFetcher(VIX/DXY) 추가, 토큰 갱신 스케줄러 분리 배포. |
 | 2026-07-12 | ga-migration-v1-0 | **GCP → GitHub Actions 마이그레이션**. cron 09:10 KST, BOM 방어 로직, Secrets 5개 등록. |
 | 2026-07-25 | — | **GA cron 비활성화**, GCP Cloud Run Always Free 티어로 운영 복귀. GitHub은 버전 관리 전용. |
+| 2026-08-16 | feat-model-3-7-flash-v1 | AI 모델 업그레이드: 주력 `gemini-3.7-flash`, 폴백 `gemini-3.6-flash`. |
 
 ## 🔀 GitHub Actions 운영 가이드 (2026-07-12~ / 비활성화: 2026-07-25)
 
