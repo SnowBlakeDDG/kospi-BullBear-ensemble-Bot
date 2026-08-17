@@ -104,21 +104,29 @@ class DiscordNotifier:
         # 줄바꿈용 빈 필드
         fields.append({"name": "\u200b", "value": "\u200b", "inline": False})
         
-        # Row 2: 개인 | 환율
+        # Row 2: 반도체 (SOXX) | 개인 수급
+        if 'soxx' in details:
+            fields.append({
+                "name": "🔌 반도체 (SOXX)",
+                "value": self._build_indicator_value(details['soxx'], name="soxx"),
+                "inline": True
+            })
         if 'retail' in details:
             fields.append({
                 "name": "👤 개인 수급",
                 "value": self._build_indicator_value(details['retail'], name="retail"),
                 "inline": True
             })
+        # 줄바꿈용 빈 필드
+        fields.append({"name": "\u200b", "value": "\u200b", "inline": False})
+        
+        # Row 3: 환율 보정 (전체 폭 또는 인라인)
         if 'fx' in details:
             fields.append({
                 "name": "💱 환율 보정",
                 "value": self._build_indicator_value(details['fx'], name="fx"),
-                "inline": True
+                "inline": False
             })
-        # 줄바꿈용 빈 필드
-        fields.append({"name": "\u200b", "value": "\u200b", "inline": False})
         
         # Row 3: 인간지표 (전체 폭)
         if 'youtube' in details:
@@ -255,7 +263,7 @@ class DiscordNotifier:
             "color": style['color'],
             "fields": fields,
             "footer": {
-                "text": f"GENSE v1.8 │ Powered by Gemini │ {report_data.get('mode', 'Standard')} Mode"
+                "text": f"GENSE v1.9 │ Powered by Gemini │ {report_data.get('mode', 'Standard')} Mode"
             }
         }
         

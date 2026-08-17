@@ -100,6 +100,7 @@ gcloud scheduler jobs update http g-ensemble-bot-job `
 | 2026-08-16 | feat-python314-v1 | **Python 3.14 마이그레이션**: Python 3.10 EOL 대비 종속성 영향평가 완료, GA/GCP 런타임 3.14 갱신. |
 | 2026-08-17 | feat-yt-metadata-v1 | **유튜브 역지표 고도화**: 게시일자 KST 배지(D-Day) 추출, 2~3개 핵심 요약 불릿 분할, AI Overview 폴백 도입. |
 | 2026-08-17 | feat-discord-ui-v2 | **다중 모델 폴백(3.7→3.6→3.5→2.5) 및 디스코드 리포트 페르소나/UI 고도화**. |
+| 2026-08-17 | feat-algorithm-v1-9 | **v1.9 알고리즘 및 V/O 초단기 수급 동적 폴백**: SOXX 반도체 지수 통합 및 변동성 폭증 시 실시간 수급 70% 집중. |
 
 ## 🔀 GitHub Actions 운영 가이드 (2026-07-12~ / 비활성화: 2026-07-25)
 

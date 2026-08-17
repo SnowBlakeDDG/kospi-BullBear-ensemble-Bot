@@ -4,24 +4,26 @@ from datetime import datetime
 
 class WeightEngine:
     """
-    G-Ensemble v1.8 Core Algorithm Engine
-    수급, 변동성, 인간 지표 및 환율 보정 로직을 통합 관리합니다.
+    G-Ensemble v1.9 Core Algorithm Engine
+    수급, 반도체(SOXX), 변동성(KORU), 인간 지표, 환율 및 V/O 초단기 수급 동적 폴백 로직을 관리합니다.
     """
 
     def __init__(self):
-        # 1. 기본 가중치 (Base Weights) - ALGORITHM.md 사양 준수
+        # 1. 기본 가중치 (Base Weights - Standard Mode)
         self.base_weights = {
-            "F": 0.4,  # 외국인 수급
-            "K": 0.3,  # KORU ETF (시장 변동성)
-            "H": 0.2,  # 인간 지표 (유튜브 센티멘트)
-            "R": 0.1   # 개인 수급 (역지표)
+            "F": 0.35,     # 외국인 수급 (현물+선물)
+            "SOXX": 0.15,  # 글로벌 반도체 지수 (코스피 선행)
+            "K": 0.20,     # KORU ETF (시장 변동성)
+            "H": 0.20,     # 인간 지표 (유튜브 역발상)
+            "R": 0.10      # 개인 수급 (역지표)
         }
         
         # 2. 임계값 설정 (Thresholds for Linear Interpolation)
         self.thresholds = {
-            "F": 5000,     # +/- 5,000억 (Extreme)
-            "K": 4.5,      # +/- 4.5% (Extreme)
-            "R": 3000      # +/- 3,000억 (Extreme)
+            "F": 5000,      # +/- 5,000억 (Extreme)
+            "SOXX": 3.0,    # +/- 3.0% (Extreme)
+            "K": 4.5,       # +/- 4.5% (Extreme)
+            "R": 3000       # +/- 3,000억 (Extreme)
         }
 
     def clamp(self, val, min_val=-1.0, max_val=1.0):
@@ -62,13 +64,13 @@ class WeightEngine:
         desc = f"실시간 환율 {usd_krw:,.2f}원 (Z: {zscore:+.2f})"
         
         if zscore >= 2.5:
-            alpha = -0.5   # 60일 통계 기준 상위 0.6% 수준의 급등 (극도 위험)
+            alpha = -0.5   # 극도 위험
             desc += " [위험]"
         elif zscore >= 1.5:
-            alpha = -0.25  # 통계 기준 급등 경고
+            alpha = -0.25  # 급등 경고
             desc += " [주의]"
         elif zscore >= 0.5:
-            alpha = -0.1   # 최근 평균 대비 상승 주의
+            alpha = -0.1   # 상승 주의
             desc += " [경고]"
         else:
             alpha = 0.0    # 안정 상태
@@ -78,7 +80,7 @@ class WeightEngine:
 
     def calculate_ensemble(self, yt_data, stock_data, sd_data, fx_data, global_data={}):
         """
-        v1.8 통합 앙상블 스코어 산출
+        v1.9 통합 앙상블 스코어 산출 (V/O 초단기 수급 동적 폴백 포함)
         """
         results = {}
         
@@ -86,12 +88,7 @@ class WeightEngine:
         is_holiday = stock_data.get('is_holiday', False) or sd_data.get('is_holiday', False)
         is_bullet = stock_data.get('is_bullet', False) or fx_data.get('is_bullet', False)
         
-        # --- [모드 결정: Dynamic Chains] ---
-        current_mode = "Standard"
-        weights = self.base_weights.copy()
-        
-        # 4.2 볼러틸리티 오버드라이브 (KORU 변동성 기준)
-        # 주말 괴리 발생 시 EWY로 대체하여 판정
+        # 주말 괴리 발생 시 EWY로 대체
         is_deviation = stock_data.get('deviation_flag', False)
         if is_deviation:
             koru_chg = stock_data.get('EWY', {}).get('pct_change', 0)
@@ -101,23 +98,33 @@ class WeightEngine:
         vix_info = global_data.get('VIX', {})
         vix_val = vix_info.get('last_close', 0)
         
-        if abs(koru_chg) > 3.0: # ALGORITHM.md의 1.5 sigma를 3.0%로 임시 근사
-            current_mode = "Volatility Overdrive"
-            weights = {"F": 0.5, "K": 0.2, "H": 0.1, "R": 0.2}
+        f_raw = sd_data.get('foreign', 0)
+        f_futures = sd_data.get('foreign_futures', 0)
+        
+        # --- [모드 결정: Dynamic Chains & V/O Fallback] ---
+        current_mode = "Standard"
+        weights = self.base_weights.copy()
+        
+        # V/O 모드 트리거 조건:
+        # 1) KORU 절대 변동률 6% 이상
+        # 2) 09:10 장초반 실시간 외인 수급 폭증 (현물 2,500억+ 또는 선물 2,500억+)
+        # 3) VIX 25 이상
+        is_vo_trigger = (abs(koru_chg) >= 6.0) or (abs(f_raw) >= 2500) or (abs(f_futures) >= 2500) or (vix_val >= 25)
+        
+        if is_vo_trigger:
+            current_mode = "Volatility Overdrive (V/O)"
+            # 초단기 실시간 수급 집중 폴백 (외인 50% + 개인 20% + KORU 20% + 인간지표 10%, 전일 SOXX는 0%)
+            weights = {"F": 0.50, "R": 0.20, "K": 0.20, "H": 0.10, "SOXX": 0.0}
             
-        # 4.3 크라이시스 모드 (장초반 급락 또는 VIX 폭등)
-        if koru_chg < -5.0 or vix_val >= 30:
+        # 크라이시스 모드 (장초반 급락 -6% 이하 또는 VIX 30 이상 폭등)
+        if koru_chg <= -6.0 or vix_val >= 30:
             current_mode = "Crisis Mode"
-            weights = {"F": 0.8, "K": 0.15, "H": 0.05, "R": 0.0} # 외인 중심
+            weights = {"F": 0.70, "K": 0.20, "R": 0.05, "H": 0.05, "SOXX": 0.0}
         
         # --- [지표별 스코어 산출 (Normalization)] ---
 
         # 1. 외국인 수급 (F)
-        f_raw = sd_data.get('foreign', 0)
         f_score = self.clamp(f_raw / self.thresholds['F'])
-        
-        # 5.2 외국인 수급 질적 분해 (선물 데이터 활용)
-        f_futures = sd_data.get('foreign_futures', 0)
         f_adj = 1.0
         if f_raw > 0 and f_futures > 0: f_adj = 1.2
         elif f_raw < 0 and f_futures < 0: f_adj = 1.5
@@ -132,7 +139,18 @@ class WeightEngine:
             "desc": f"외인 수급: {f_raw:,}억 (선물 {f_futures:+,}억, 보정 x{f_adj})"
         }
 
-        # 2. KORU (K) - 변동성 기반
+        # 2. 글로벌 반도체 지수 (SOXX)
+        soxx_info = global_data.get('SOXX', {})
+        soxx_chg = soxx_info.get('pct_change', 0.0)
+        soxx_val = self.clamp(soxx_chg / self.thresholds['SOXX'])
+        results['soxx'] = {
+            "val": soxx_val,
+            "weight": weights.get('SOXX', 0.0),
+            "label": self.get_indicator_label(soxx_val),
+            "desc": f"반도체(SOXX): {soxx_chg:+.2f}%"
+        }
+
+        # 3. KORU (K) - 시장 변동성
         k_val = self.clamp(koru_chg / self.thresholds['K'])
         k_desc = f"EWY 대체: {koru_chg:+.2f}%" if is_deviation else f"KORU 변동: {koru_chg:+.2f}%"
         results['koru'] = {
@@ -142,13 +160,12 @@ class WeightEngine:
             "desc": k_desc
         }
 
-        # 3. 인간 지표 (H) - 역발상 로직
+        # 4. 인간 지표 (H) - 역발상 로직
         yt_score = yt_data.get('score', 50)
         h_val = 0.0
-        if not (40 <= yt_score <= 60): # Dead-zone (40~60점) 제외
+        if not (40 <= yt_score <= 60):  # Dead-zone (40~60점) 제외
             h_val = -((yt_score - 50) / 50.0)
         
-        # 5.4 시간 감쇄 (Time-Decay) - 현재는 1일차(1.0) 고정, 향후 히스토리 저장 시 구현
         results['youtube'] = {
             "val": h_val,
             "weight": weights['H'],
@@ -156,9 +173,9 @@ class WeightEngine:
             "desc": f"인간 지표: {yt_score}점 (역발상)"
         }
 
-        # 4. 개인 수급 (R) - 역지표
+        # 5. 개인 수급 (R) - 역지표
         r_raw = sd_data.get('individual', 0)
-        r_val = self.clamp(-r_raw / self.thresholds['R']) # 개인이 사면 음수
+        r_val = self.clamp(-r_raw / self.thresholds['R'])  # 개인이 사면 음수
         results['retail'] = {
             "val": r_val,
             "weight": weights['R'],
@@ -168,23 +185,22 @@ class WeightEngine:
 
         # --- [최종 합산 및 보정] ---
         
-        # 기본 가중 합산
-        base_sum = sum(results[k]['val'] * results[k]['weight'] for k in results)
+        # 가중 합산
+        base_sum = sum(results[k]['val'] * results[k]['weight'] for k in results if k in ['foreign', 'soxx', 'koru', 'youtube', 'retail'])
         
-        # 4.1 환율 보정 (Alpha_FX)
+        # 환율 보정 (Alpha_FX)
         fx_alpha, fx_desc = self.calculate_fx_alpha(fx_data)
         
-        # DiscordNotifier 호환을 위해 fx 정보 추가
         results['fx'] = {
             "val": fx_alpha,
-            "weight": 0.0, # alpha 보정이므로 가중치 합산에선 제외 (이미 base_sum 이후 더함)
+            "weight": 0.0,
             "label": "Warning" if fx_alpha < 0 else "Stable",
             "desc": fx_desc
         }
 
         final_score = base_sum + fx_alpha
         
-        # 6.2 오버슈팅 방지 (Slightly Bullish 이고 낙관적이면 Neutral 조정)
+        # 오버슈팅 방지 (Slightly Bullish 이고 유튜브 낙관적이면 Neutral 조정)
         if 0.15 <= final_score < 0.35 and h_val < 0:
             final_score = 0.0
             results['overshooting_adj'] = True

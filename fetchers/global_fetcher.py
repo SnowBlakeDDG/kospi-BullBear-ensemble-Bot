@@ -6,7 +6,8 @@ class GlobalFetcher(BaseFetcher):
         self.tickers = {
             'VIX': '^VIX',
             'S&P500': '^GSPC',
-            'DXY': 'DX-Y.NYB' # 달러 인덱스
+            'DXY': 'DX-Y.NYB', # 달러 인덱스
+            'SOXX': 'SOXX'     # 필라델피아 반도체 ETF (코스피 선행지표)
         }
 
     def fetch(self):

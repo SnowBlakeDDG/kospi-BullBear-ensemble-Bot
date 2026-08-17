@@ -17,11 +17,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 load_dotenv()
 
 def run_weight_engine_tests():
-    print("\n[1/3] 🧪 WeightEngine v1.8 알고리즘 단위 테스트 실행...")
+    print("\n[1/3] 🧪 WeightEngine v1.9 알고리즘 및 V/O 동적 폴백 단위 테스트 실행...")
     try:
-        from test_weight_v1_8 import test_weight_engine_v1_8
-        test_weight_engine_v1_8()
-        print("  ✅ WeightEngine v1.8 테스트 성공 (6개 케이스 All Pass)")
+        from test_weight_v1_8 import test_weight_engine_v1_9
+        test_weight_engine_v1_9()
+        print("  ✅ WeightEngine v1.9 테스트 성공 (6개 케이스 All Pass)")
         return True
     except Exception as e:
         print(f"  ❌ WeightEngine 테스트 실패: {e}")
