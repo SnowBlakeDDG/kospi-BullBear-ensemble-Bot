@@ -69,6 +69,8 @@ def main(dry_run=False):
     final_report['yt_title'] = yt_analysis.get('yt_title', 'N/A')
     final_report['yt_url'] = yt_analysis.get('yt_url', 'N/A')
     final_report['yt_summary'] = yt_analysis.get('summary', 'N/A')
+    final_report['yt_date_badge'] = yt_analysis.get('date_badge', '')
+    final_report['yt_key_points'] = yt_analysis.get('key_points', [])
 
     comp_analysis = analyzer.analyze_market_comprehensive(final_report)
     final_report['analysis'] = comp_analysis
@@ -81,7 +83,12 @@ def main(dry_run=False):
         print(f"Final Score: {final_report.get('final_score')} | Signal: {final_report.get('signal')} | Mode: {final_report.get('mode')}")
         print(f"One-Liner: {comp_analysis.get('one_liner')}")
         print(f"Market Summary: {comp_analysis.get('market_summary')}")
-        print(f"YouTube Sentiment: {yt_analysis.get('score')}점 ({yt_analysis.get('yt_title')})")
+        print(f"YouTube Sentiment: {yt_analysis.get('score')}점 [{yt_analysis.get('date_badge')}]")
+        print(f"YouTube Title: {yt_analysis.get('yt_title')}")
+        if yt_analysis.get('key_points'):
+            print("YouTube Key Points:")
+            for p in yt_analysis.get('key_points'):
+                print(f"  • {p}")
         print("=" * 60)
     else:
         print("[4/4] 디스코드 분석 리포트 발송 중...")

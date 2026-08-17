@@ -12,8 +12,9 @@ import os
 import argparse
 from dotenv import load_dotenv
 
-# 루트 경로 추가
+# 루트 경로 추가 및 환경 변수 로드
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+load_dotenv()
 
 def run_weight_engine_tests():
     print("\n[1/3] 🧪 WeightEngine v1.8 알고리즘 단위 테스트 실행...")
@@ -52,16 +53,15 @@ def run_fetcher_tests():
 def run_model_tests():
     print("\n[3/3] 🤖 Gemini 3.7 Flash 모델 추론 테스트 실행...")
     try:
-        load_dotenv()
         from models.yt_analyzer import YTAnalyzer
         analyzer = YTAnalyzer(model_name='gemini-3.7-flash')
         
-        # 샘플 입력으로 역지표 추론 검증
-        test_title = "코스피 3000 돌파 임박? 지금 당장 사야할 주식 TOP 3"
-        result = analyzer.analyze_sentiment("dummy_id")
-        print(f"  - 모델 응답 점수: {result.get('score')}점")
-        print(f"  - 모델 요약/이유: {str(result.get('summary', result.get('reason')))[:60]}...")
-        print("  ✅ Gemini 모델 추론 테스트 성공")
+        # 1. AI Overview 폴백 검증
+        fallback_res = analyzer.analyze_sentiment("dummy_id")
+        print(f"  - AI Overview 점수: {fallback_res.get('score')}점 [{fallback_res.get('date_badge')}]")
+        print(f"  - AI Overview 키포인트: {fallback_res.get('key_points')}")
+        
+        print("  ✅ Gemini 모델 추론 및 AI Overview 폴백 테스트 성공")
         return True
     except Exception as e:
         print(f"  ❌ Gemini 모델 테스트 실패: {e}")

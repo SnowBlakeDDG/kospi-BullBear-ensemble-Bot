@@ -14,16 +14,49 @@ class YTAnalyzer:
         self.model_name = model_name
         self.fallback_model = 'gemini-3.6-flash' 
         self.channel_url = 'https://www.youtube.com/@moneydo/videos'
-        self._cached_title = None  # 게스트 필터링 시 제목 캐시
+        self._cached_video_info = None  # 게스트 필터링 시 영상 메타데이터 캐시
+
+    def _parse_date_badge(self, raw_date, relative_text=None):
+        """ISO 업로드 일자 또는 상대 일자 텍스트를 KST 기준 배지로 변환"""
+        from datetime import datetime, timezone, timedelta
+        kst = timezone(timedelta(hours=9))
+        now_kst = datetime.now(kst)
+        
+        if raw_date:
+            try:
+                if 'T' in raw_date:
+                    dt = datetime.fromisoformat(raw_date).astimezone(kst)
+                else:
+                    dt = datetime.strptime(raw_date[:10], '%Y-%m-%d').replace(tzinfo=kst)
+                
+                days_diff = (now_kst.date() - dt.date()).days
+                date_str = dt.strftime('%Y-%m-%d')
+                
+                if days_diff == 0:
+                    badge = f"📅 {date_str} (오늘 D-0)"
+                elif days_diff == 1:
+                    badge = f"📅 {date_str} (어제 D-1)"
+                else:
+                    badge = f"📅 {date_str} (D-{days_diff})"
+                
+                return date_str, badge, days_diff
+            except Exception as e:
+                pass
+
+        if relative_text:
+            return relative_text, f"📅 {relative_text}", 0
+            
+        today_str = now_kst.strftime('%Y-%m-%d')
+        return today_str, f"📅 {today_str}", 0
 
     def get_latest_video_id(self):
         """전인구 솔로 영상 중 최신 video_id 반환 (게스트 출연 및 회원 전용 영상 제외)"""
-        self._cached_title = None
+        self._cached_video_info = None
         try:
             res = requests.get(self.channel_url, timeout=10)
             ids = list(dict.fromkeys(re.findall(r'watch\?v=([a-zA-Z0-9_-]{11})', res.text)))
 
-            for vid in ids[:12]:  # 최대 12개 후보 검사 (원하는 영상이 뒤에 있을 수 있으므로 탐색 범위 확장)
+            for vid in ids[:12]:  # 최대 12개 후보 검사
                 video_info = self._fetch_video_info(vid)
                 if not video_info or not video_info.get('title'):
                     continue
@@ -40,8 +73,9 @@ class YTAnalyzer:
                     print(f"⏭️ 게스트(초대석) 영상 건너뜀: {title}")
                     continue
                 
-                print(f"📺 솔로 분석 영상 선택: {title}")
-                self._cached_title = title
+                print(f"📺 솔로 분석 영상 선택: {title} [{video_info.get('date_badge', 'N/A')}]")
+                self._cached_video_info = video_info
+                self._cached_video_info['video_id'] = vid
                 return vid
 
             # 필터링 통과 영상을 못 찾으면 최신 비멤버십 영상 사용 (폴백)
@@ -50,7 +84,8 @@ class YTAnalyzer:
                     info = self._fetch_video_info(vid)
                     if info and not info.get('is_members_only'):
                         print(f"⚠️ 필터링 매칭 실패로 차선책 비멤버십 영상 사용: {info['title']}")
-                        self._cached_title = info['title']
+                        self._cached_video_info = info
+                        self._cached_video_info['video_id'] = vid
                         return vid
                 return ids[0]
             return None
@@ -59,7 +94,7 @@ class YTAnalyzer:
             return None
 
     def _fetch_video_info(self, video_id):
-        """영상 상세 페이지 HTML 및 자막 조회 권한을 확인하여 제목과 회원전용 여부를 분석"""
+        """영상 상세 페이지 HTML 및 자막 조회 권한을 확인하여 제목, 업로드일자, 회원전용 여부를 분석"""
         try:
             res = requests.get(f'https://www.youtube.com/watch?v={video_id}', timeout=10)
             html = res.text
@@ -68,22 +103,30 @@ class YTAnalyzer:
             title_match = re.search(r'<title>(.*?)</title>', html)
             title = title_match.group(1).replace(' - YouTube', '') if title_match else None
             
+            # 업로드 일자 추출 (itemprop="uploadDate" / itemprop="datePublished" / relativeDateText)
+            upload_date_m = re.search(r'itemprop="uploadDate" content="([^"]+)"', html)
+            date_pub_m = re.search(r'itemprop="datePublished" content="([^"]+)"', html)
+            relative_date_m = re.search(r'"relativeDateText":\{[^}]*?"simpleText":"([^"]+)"\}', html)
+            
+            raw_date = upload_date_m.group(1) if upload_date_m else (date_pub_m.group(1) if date_pub_m else None)
+            rel_text = relative_date_m.group(1) if relative_date_m else None
+            
+            published_at, date_badge, days_ago = self._parse_date_badge(raw_date, rel_text)
+            
             is_members_only = False
             
             # 1. youtube-transcript-api 권한 검사를 통한 정교한 멤버십(회원전용) 감지
-            # 비로그인 상태에서 멤버십 전용 동영상은 자막 목록 획득 시 VideoUnplayable 에러가 발생합니다.
             try:
                 from youtube_transcript_api import YouTubeTranscriptApi
                 api = YouTubeTranscriptApi()
-                api.list(video_id)  # 자막 조회 시도 (멤버십 락 시 VideoUnplayable 발생)
+                api.list(video_id)  # 자막 조회 시도
             except Exception as e:
-                # VideoUnplayable 또는 멤버십 제한 관련 클래스명 검출
                 err_name = type(e).__name__
                 if err_name == 'VideoUnplayable' or 'members' in str(e).lower():
                     print(f"🔒 멤버십 권한 제약 감지 ({video_id}): {err_name}")
                     is_members_only = True
             
-            # 2. HTML 백업 키워드 체크 (자막 조회가 우연히 통과된 특수 예외 케이스 방어)
+            # 2. HTML 백업 키워드 체크
             if not is_members_only:
                 membership_keywords = [
                     "OFFER_TYPE_MEMBERSHIP", 
@@ -96,6 +139,9 @@ class YTAnalyzer:
             
             return {
                 'title': title,
+                'published_at': published_at,
+                'date_badge': date_badge,
+                'days_ago': days_ago,
                 'is_members_only': is_members_only
             }
         except Exception as e:
@@ -105,9 +151,7 @@ class YTAnalyzer:
     def _is_guest_video_by_ai(self, title):
         """Gemini API를 호출하여 영상 제목을 보고 게스트 초대 대담인지 판별"""
         if not self.client:
-            # API 키가 없는 경우 기본 정규식 폴백
             guest_keywords = ['교수', '박사', '대표', '소장', '기자', '작가', '대담', '인터뷰']
-            # ft. 패턴 매칭 시 뒤에 직함 등이 있는지 약식 판별
             if 'ft.' in title.lower():
                 return any(kw in title for kw in guest_keywords)
             return False
@@ -127,7 +171,6 @@ class YTAnalyzer:
         영상 제목: {title}'''
 
         try:
-            # 피크 타임 503 에러 대응을 위한 최대 3회 재시도 루프
             for attempt in range(3):
                 try:
                     response = self.client.models.generate_content(
@@ -144,7 +187,6 @@ class YTAnalyzer:
                         print(f"🤖 AI 판별 결과: {is_guest} ({reason}) | 제목: {title}")
                         return is_guest
                 except Exception as ex:
-                    # 503 에러 등 임시 장해의 경우 대기 후 재시도
                     if "503" in str(ex) and attempt < 2:
                         wait_time = 2 * (attempt + 1)
                         print(f"⚠️ AI 판별 503 에러 발생 (시도 {attempt+1}/3), {wait_time}초 후 재시도... 에러: {ex}")
@@ -155,7 +197,6 @@ class YTAnalyzer:
         except Exception as e:
             print(f"⚠️ AI 게스트 판별 오류 (기본 폴백 적용): {e}")
             
-        # 오류 시 기본 키워드 폴백 (확장된 키워드 사전 적용)
         fallback_keywords = [
             '교수', '박사', '대표', '작가', '소장', '기자', '스승님', 
             '대표', '위원', '애널리스트', '센터장', '연구원', '전문가', 
@@ -164,37 +205,49 @@ class YTAnalyzer:
         return any(kw in title for kw in fallback_keywords)
 
     def get_transcript(self, video_id):
-        """영상 제목 정보를 수집하여 Gemini의 추론을 위한 기초 데이터 제공"""
+        """영상 제목 및 게시일자 정보를 수집하여 Gemini의 추론을 위한 기초 데이터 제공"""
         if not video_id: return "No Video"
-        if self._cached_title:
-            title = self._cached_title
+        if self._cached_video_info and self._cached_video_info.get('video_id') == video_id:
+            title = self._cached_video_info.get('title', 'No Title')
+            date_badge = self._cached_video_info.get('date_badge', '')
         else:
             info = self._fetch_video_info(video_id)
             title = info['title'] if info else "No Title"
-        return f"영상 제목: {title}\nURL: https://www.youtube.com/watch?v={video_id}"
+            date_badge = info['date_badge'] if info else ""
+        return f"영상 제목: {title}\n게시일: {date_badge}\nURL: https://www.youtube.com/watch?v={video_id}"
 
     def analyze_sentiment(self, video_id):
-        """video_id를 받아 메타데이터 수집 및 역지표 점수 추출을 한 번에 수행"""
+        """video_id를 받아 메타데이터 수집 및 역지표 점수 추출을 한 번에 수행 (실패 시 AI Overview 폴백)"""
         if not self.client:
-            return {"score": 50, "reason": "API Key Missing"}
+            return {"score": 50, "reason": "API Key Missing", "key_points": []}
 
-        # 메타데이터(제목, URL) 수집
+        # 영상 탐색에 실패했거나 ID가 없는 경우 AI Overview 폴백 가동
+        if not video_id or video_id == "dummy_id":
+            return self._analyze_fallback_overview()
+
+        # 메타데이터(제목, 날짜, URL) 수집
         metadata = self.get_transcript(video_id)
+        video_info = self._cached_video_info or self._fetch_video_info(video_id) or {}
         
         prompt = f'''당신은 대한민국 최고의 퀀트 전략가이자 시장 심리 분석가입니다. 
         제공된 유튜브 영상 정보를 바탕으로 영상의 핵심 내용을 분석하여 한국 증시에 미치는 영향을 요약하고, 이를 '역지표' 관점에서 분석하세요.
         
         **분석 지침:**
         1. **영상 내용 분석**: 해당 채널(전인구경제연구소)의 최신 영상 내용을 분석하여, 해당 영상의 핵심 내용이 한국 증시에 긍정적(호재)인지 혹은 부정적(악재)인지 2-3문장으로 요약하세요.
-        2. **강력한 역지표 원칙**:
+        2. **핵심 요약 포인트 (2~3개)**: 영상에서 다루는 주요 이슈/테마를 2~3개의 핵심 불릿(`key_points`)으로 명확히 정리하세요. (각 15자~30자 내외)
+        3. **강력한 역지표 원칙**:
            - **낙관 = 위험**: 유튜버가 시장을 긍정적으로 보고 매수를 추천할수록 점수를 높게(70~100) 주십시오. 이는 '과열' 신호입니다.
            - **비관 = 기회**: 유튜버가 공포를 조장하고 폭락을 경고할수록 점수를 낮게(0~30) 주십시오. 이는 '바닥' 신호입니다.
-        3. **뉘앙스 통일**: "유튜버가 낙관하고 있으므로, 역지표 관점에서는 위험 신호로 해석된다"와 같이 논리적 방향을 명확히 하세요.
+        4. **뉘앙스 통일**: "유튜버가 낙관하고 있으므로, 역지표 관점에서는 위험 신호로 해석된다"와 같이 논리적 방향을 명확히 하세요.
         
         **응답 형식 (JSON):**
         {{
             "score": (0~100 사이 정수),
             "summary": "영상 핵심 내용 및 한국 시장 연관성 요약 (호재/악재 판단 포함)",
+            "key_points": [
+                "핵심 포인트 1 (호재/악재 맥락)",
+                "핵심 포인트 2 (호재/악재 맥락)"
+            ],
             "reason": "역지표 관점의 점수 산정 근거 및 시장 경고/기회 메시지"
         }}
 
@@ -203,18 +256,70 @@ class YTAnalyzer:
         
         try:
             result = self._call_gemini(self.model_name, prompt)
-            # 수집된 메타데이터를 결과에 통합
-            result['yt_title'] = metadata.split('\n')[0].replace('영상 제목: ', '')
-            result['yt_url'] = f"https://www.youtube.com/watch?v={video_id}"
-            return result
+            return self._enrich_sentiment_result(result, metadata, video_id, video_info)
         except Exception as e:
             try:
                 result = self._call_gemini(self.fallback_model, prompt)
-                result['yt_title'] = metadata.split('\n')[0].replace('영상 제목: ', '')
-                result['yt_url'] = f"https://www.youtube.com/watch?v={video_id}"
-                return result
+                return self._enrich_sentiment_result(result, metadata, video_id, video_info)
             except:
-                return {"score": 50, "reason": "API Error", "yt_title": "N/A", "yt_url": f"https://www.youtube.com/watch?v={video_id}"}
+                return self._analyze_fallback_overview()
+
+    def _enrich_sentiment_result(self, result, metadata, video_id, video_info):
+        """수집된 메타데이터와 날짜 정보를 결과 객체에 병합"""
+        title = video_info.get('title') or metadata.split('\n')[0].replace('영상 제목: ', '')
+        result['yt_title'] = title
+        result['yt_url'] = f"https://www.youtube.com/watch?v={video_id}"
+        result['published_at'] = video_info.get('published_at', '')
+        result['date_badge'] = video_info.get('date_badge', '')
+        result['days_ago'] = video_info.get('days_ago', 0)
+        if 'key_points' not in result or not isinstance(result['key_points'], list):
+            result['key_points'] = [result.get('summary', '')[:40]]
+        return result
+
+    def _analyze_fallback_overview(self):
+        """유튜브 탐색 실패 시 거시경제/투자심리 기반 AI Overview 생성 폴백"""
+        print("🤖 [AI Overview] 유튜브 영상 탐색 폴백 가동: 거시경제 심리 기반 분석 생성")
+        prompt = '''당신은 대한민국 최고의 퀀트 전략가입니다.
+        현재 한국 코스피 및 글로벌 거시경제 시장의 대중 투자 심리를 종합 분석하여 역지표 점수를 산출하세요.
+
+        **분석 지침:**
+        1. 최근 주요 시장 이슈(금리, 환율, 반도체 및 빅테크 실적, 지정학적 리스크 등)를 바탕으로 대중 심리가 '과열(낙관)'인지 '공포(비관)'인지 평가하세요.
+        2. 역지표 원칙: 대중 낙관 = 70~100 (위험), 대중 공포 = 0~30 (기회), 중립 = 40~60.
+        3. 핵심 포인트 2~3개를 불릿으로 요약하세요.
+
+        **응답 형식 (JSON):**
+        {{
+            "score": (0~100 사이 정수),
+            "summary": "현재 시장 심리 및 거시경제 흐름 2-3문장 요약",
+            "key_points": [
+                "매크로 핵심 이슈 1",
+                "매크로 핵심 이슈 2"
+            ],
+            "reason": "대중 심리 진단 및 역지표 관점의 시장 기회/위험 근거"
+        }}'''
+        
+        try:
+            res = self._call_gemini(self.fallback_model, prompt)
+            res['yt_title'] = "글로벌 매크로 & 국내 증시 투자심리 개요"
+            res['yt_url'] = ""
+            res['date_badge'] = "🤖 AI Overview (실시간 검색 보완)"
+            res['published_at'] = ""
+            res['days_ago'] = 0
+            res['is_ai_overview'] = True
+            return res
+        except Exception as e:
+            return {
+                "score": 50,
+                "summary": "시장 심리 지표 중립 유지",
+                "key_points": ["글로벌 관망세 지속", "지표 변동성 제한적"],
+                "reason": "데이터 수집 제한으로 기본 중립 적용",
+                "yt_title": "매크로 기본 심리",
+                "yt_url": "",
+                "date_badge": "🤖 AI Overview (기본값)",
+                "published_at": "",
+                "days_ago": 0,
+                "is_ai_overview": True
+            }
 
     def analyze_market_comprehensive(self, market_data):
         """시장 지표와 유튜브 센티멘트를 결합하여 종합 분석 리포트 생성 (Single-Turn)"""

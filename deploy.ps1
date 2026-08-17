@@ -67,7 +67,11 @@ try {
         --allow-unauthenticated `
         --env-vars-file=$yamlFile `
         --timeout=120s `
-        --update-labels=("version=" + $Version)
+        --update-labels "version=$Version"
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "gcloud functions deploy failed with exit code $LASTEXITCODE"
+    }
 
     Write-Host "⏰ Cloud Scheduler (09:10 KST) 동기화..." -ForegroundColor Green
     $uri = (gcloud functions describe $FunctionName --region=$Region --format='value(serviceConfig.uri)')

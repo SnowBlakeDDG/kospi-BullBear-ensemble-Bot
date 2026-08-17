@@ -179,10 +179,22 @@ class DiscordNotifier:
                 "inline": False
             })
         
-        # 유튜브 인사이트
+        # 유튜브 인사이트 및 핵심 포인트
+        yt_points = report_data.get('yt_key_points', [])
+        yt_date_badge = report_data.get('yt_date_badge', '')
+        
+        yt_value_parts = []
+        if yt_date_badge:
+            yt_value_parts.append(f"**{yt_date_badge}**")
+        if yt_insight and yt_insight != 'N/A':
+            yt_value_parts.append(yt_insight)
+        if yt_points:
+            points_text = "\n".join([f"• {p}" for p in yt_points[:3]])
+            yt_value_parts.append(points_text)
+            
         fields.append({
-            "name": "🎭 유튜브 인사이트",
-            "value": yt_insight,
+            "name": "🎭 유튜브 대중심리 & 핵심 이슈",
+            "value": self._truncate("\n".join(yt_value_parts) if yt_value_parts else "N/A", 1024),
             "inline": False
         })
         
@@ -213,9 +225,10 @@ class DiscordNotifier:
             "inline": False
         })
         
-        # 영상 출처 — 제목 기반 하이퍼링크
+        # 영상 출처 — 제목 기반 하이퍼링크 + 날짜 배지
         yt_title = report_data.get('yt_title', 'N/A')
         yt_url = report_data.get('yt_url', '')
+        yt_date_badge = report_data.get('yt_date_badge', '')
         
         # Discord 마크다운 링크 호환을 위한 제목 정제
         import html as _html
@@ -223,13 +236,16 @@ class DiscordNotifier:
         for ch in ['[', ']', '(', ')']:          # 마크다운 링크 구문 깨짐 방지
             clean_title = clean_title.replace(ch, f'\\{ch}')
         
+        badge_suffix = f" ({yt_date_badge})" if yt_date_badge else ""
         if yt_url and yt_url != 'N/A' and clean_title != 'N/A':
-            source_text = f"[📺 {clean_title}]({yt_url})"
+            source_text = f"[📺 {clean_title}{badge_suffix}]({yt_url})"
+        elif yt_date_badge:
+            source_text = f"{clean_title} ({yt_date_badge})"
         else:
             source_text = clean_title
         
         fields.append({
-            "name": "📺 분석 영상",
+            "name": "📺 분석 영상 출처",
             "value": source_text,
             "inline": False
         })
