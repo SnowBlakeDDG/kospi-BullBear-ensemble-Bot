@@ -11,10 +11,14 @@ class YTAnalyzer:
     def __init__(self, model_name='gemini-3.7-flash'): 
         self.api_key = os.getenv('GEMINI_API_KEY')
         self.client = genai.Client(api_key=self.api_key) if self.api_key else None
-        self.model_name = model_name
-        self.fallback_model = 'gemini-3.6-flash' 
+        
+        # 모델 우선순위 체인: 3.7 -> 3.6 -> 3.5 -> 2.5
+        configured_model = os.getenv('GEMINI_MODEL', model_name)
+        candidates = [configured_model, 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-2.5-flash']
+        # 순서 유지 중복 제거
+        self.model_chain = list(dict.fromkeys(candidates))
         self.channel_url = 'https://www.youtube.com/@moneydo/videos'
-        self._cached_video_info = None  # 게스트 필터링 시 영상 메타데이터 캐시
+        self._cached_video_info = None
 
     def _parse_date_badge(self, raw_date, relative_text=None):
         """ISO 업로드 일자 또는 상대 일자 텍스트를 KST 기준 배지로 변환"""
@@ -103,7 +107,7 @@ class YTAnalyzer:
             title_match = re.search(r'<title>(.*?)</title>', html)
             title = title_match.group(1).replace(' - YouTube', '') if title_match else None
             
-            # 업로드 일자 추출 (itemprop="uploadDate" / itemprop="datePublished" / relativeDateText)
+            # 업로드 일자 추출
             upload_date_m = re.search(r'itemprop="uploadDate" content="([^"]+)"', html)
             date_pub_m = re.search(r'itemprop="datePublished" content="([^"]+)"', html)
             relative_date_m = re.search(r'"relativeDateText":\{[^}]*?"simpleText":"([^"]+)"\}', html)
@@ -115,11 +119,11 @@ class YTAnalyzer:
             
             is_members_only = False
             
-            # 1. youtube-transcript-api 권한 검사를 통한 정교한 멤버십(회원전용) 감지
+            # 1. youtube-transcript-api 권한 검사
             try:
                 from youtube_transcript_api import YouTubeTranscriptApi
                 api = YouTubeTranscriptApi()
-                api.list(video_id)  # 자막 조회 시도
+                api.list(video_id)
             except Exception as e:
                 err_name = type(e).__name__
                 if err_name == 'VideoUnplayable' or 'members' in str(e).lower():
@@ -171,29 +175,11 @@ class YTAnalyzer:
         영상 제목: {title}'''
 
         try:
-            for attempt in range(3):
-                try:
-                    response = self.client.models.generate_content(
-                        model=self.fallback_model,
-                        contents=prompt,
-                        config={
-                            'response_mime_type': 'application/json'
-                        }
-                    )
-                    if response.text:
-                        result = json.loads(response.text)
-                        is_guest = result.get('is_guest', False)
-                        reason = result.get('reason', '')
-                        print(f"🤖 AI 판별 결과: {is_guest} ({reason}) | 제목: {title}")
-                        return is_guest
-                except Exception as ex:
-                    if "503" in str(ex) and attempt < 2:
-                        wait_time = 2 * (attempt + 1)
-                        print(f"⚠️ AI 판별 503 에러 발생 (시도 {attempt+1}/3), {wait_time}초 후 재시도... 에러: {ex}")
-                        import time
-                        time.sleep(wait_time)
-                    else:
-                        raise ex
+            result = self._call_gemini_chain(prompt)
+            is_guest = result.get('is_guest', False)
+            reason = result.get('reason', '')
+            print(f"🤖 AI 판별 결과: {is_guest} ({reason}) | 제목: {title}")
+            return is_guest
         except Exception as e:
             print(f"⚠️ AI 게스트 판별 오류 (기본 폴백 적용): {e}")
             
@@ -255,14 +241,10 @@ class YTAnalyzer:
         {metadata}'''
         
         try:
-            result = self._call_gemini(self.model_name, prompt)
+            result = self._call_gemini_chain(prompt)
             return self._enrich_sentiment_result(result, metadata, video_id, video_info)
         except Exception as e:
-            try:
-                result = self._call_gemini(self.fallback_model, prompt)
-                return self._enrich_sentiment_result(result, metadata, video_id, video_info)
-            except:
-                return self._analyze_fallback_overview()
+            return self._analyze_fallback_overview()
 
     def _enrich_sentiment_result(self, result, metadata, video_id, video_info):
         """수집된 메타데이터와 날짜 정보를 결과 객체에 병합"""
@@ -299,7 +281,7 @@ class YTAnalyzer:
         }}'''
         
         try:
-            res = self._call_gemini(self.fallback_model, prompt)
+            res = self._call_gemini_chain(prompt)
             res['yt_title'] = "글로벌 매크로 & 국내 증시 투자심리 개요"
             res['yt_url'] = ""
             res['date_badge'] = "🤖 AI Overview (실시간 검색 보완)"
@@ -326,63 +308,79 @@ class YTAnalyzer:
         if not self.client:
             return {"error": "API Key Missing"}
 
-        # 간결한 인사이트 중심 프롬프트 (수치 반복 금지)
         prompt = f'''
-        당신은 GENSE 시스템의 수석 전략가입니다. 아래 데이터를 바탕으로 간결한 투자 전략 리포트를 작성하세요.
+        당신은 GENSE 시스템의 수석 퀀트 전략가입니다. 아래 데이터를 바탕으로 전문적이면서도 실행력 있는 투자 전략 리포트를 작성하세요.
 
         ### 입력 데이터:
-        1. 유튜브 분석: {market_data.get('yt_summary')} (제목: {market_data.get('yt_title')})
-        2. 지표 데이터: {json.dumps(market_data.get('details'), ensure_ascii=False)}
-        3. 최종: {market_data.get('final_score')} ({market_data.get('signal')}) / {market_data.get('mode')}
+        1. 유튜브 센티멘트: {market_data.get('yt_summary')} (제목: {market_data.get('yt_title')})
+        2. 지표 스냅샷: {json.dumps(market_data.get('details'), ensure_ascii=False)}
+        3. 앙상블 판정: 스코어 {market_data.get('final_score')} ({market_data.get('signal')}) / 모드 {market_data.get('mode')}
 
         ### 작성 규칙 (엄수):
-        - **수치 반복 금지**: 외인 수급 금액, KORU 변동률, 환율 등 수치 데이터는 이미 대시보드에 표시됩니다. 본문에서 같은 숫자를 다시 언급하지 마세요.
-        - **인사이트 중심**: "왜 그런지", "그래서 어떻게 해야 하는지"에 집중하세요.
-        - **간결성**: market_summary는 2문장 이내. key_analysis의 content는 각 1~2문장. guide는 즉시 실행 가능한 1줄 액션.
-        - **역지표 해석**: 유튜버의 낙관/비관을 반드시 역방향으로 해석하세요.
+        - **수치 중복 나열 금지**: 금액, 변동률, 환율 등 이미 스냅샷에 표시된 숫자를 본문에서 단순 반복하지 마세요.
+        - **인사이트 & 맥락 중심**: "왜 시장이 이렇게 반응하는지", "그래서 어떻게 대응해야 하는지" 핵심 흐름에 집중하세요.
+        - **market_summary**: 시장의 핵심 맥락을 2문장 이내로 명확하게 요약하세요.
+        - **key_analysis**: 핵심 테마 2~3개 (각 테마명 5자 내외, 인사이트 1~2문장).
+        - **yt_insight**: 유튜버/대중 심리를 역발상 관점에서 1~2문장으로 명쾌하게 진단하세요.
+        - **strategy**: 구체적이고 단기 실행 가능한 가이드 3개 (예: "1. 3000선 이하 분할 매수 대응", "2. KORU 급등 시 분할 차익 실현", "3. 현금 비중 20% 유지").
 
         ### JSON 출력 구조:
         {{
-            "one_liner": "핵심 한줄 (15자 내외, 임팩트 있게)",
+            "one_liner": "핵심 한줄 요약 (15자 내외, 직관적이고 임팩트 있게)",
             "market_summary": "시장 상황 2문장 요약 (수치 반복 없이 흐름과 맥락만)",
             "key_analysis": [
-                {{"title": "테마명 (5자 내외)", "content": "인사이트 1~2문장"}},
+                {{"title": "테마명", "content": "인사이트 1~2문장"}},
                 {{"title": "테마명", "content": "인사이트 1~2문장"}}
             ],
             "yt_insight": "대중 심리 진단 1~2문장 (역지표 관점)",
             "strategy": {{
-                "position": "포지션 (예: 중립, 비중 축소)",
-                "guide": ["액션 1", "액션 2", "액션 3"]
+                "position": "포지션 (예: 적극 매수, 비중 축소, 관망/중립)",
+                "guide": [
+                    "구체적 실행 액션 1",
+                    "구체적 실행 액션 2",
+                    "구체적 실행 액션 3"
+                ]
             }}
         }}
         '''
 
         try:
-            return self._call_gemini(self.model_name, prompt)
+            return self._call_gemini_chain(prompt)
         except Exception as e:
-            print(f"⚠️ {self.model_name} 분석 실패: {e}")
-            try:
-                return self._call_gemini(self.fallback_model, prompt)
-            except Exception as e2:
-                return {"error": f"All models failed: {str(e2)}"}
+            return {"error": f"All models in chain failed: {str(e)}"}
 
-    def _call_gemini(self, model, prompt):
-        # 최신 SDK 호출 방식 - JSON 응답 강제
-        response = self.client.models.generate_content(
-            model=model,
-            contents=prompt,
-            config={
-                'response_mime_type': 'application/json'
-            }
-        )
+    def _call_gemini_chain(self, prompt):
+        """3.7 -> 3.6 -> 3.5 -> 2.5 순서로 다중 순차 폴백 실행"""
+        last_error = None
         
-        if response.text:
+        for model in self.model_chain:
             try:
-                return json.loads(response.text)
-            except json.JSONDecodeError:
-                # 폴백: 텍스트에서 JSON 추출 시도
-                match = re.search(r'\{.*\}', response.text, re.DOTALL)
-                if match:
-                    return json.loads(match.group())
-        
-        raise ValueError(f"Empty or Invalid JSON from {model}")
+                response = self.client.models.generate_content(
+                    model=model,
+                    contents=prompt,
+                    config={
+                        'response_mime_type': 'application/json'
+                    }
+                )
+                
+                if response.text:
+                    try:
+                        data = json.loads(response.text)
+                        print(f"🤖 [Gemini 호출 성공] 모델: {model}")
+                        return data
+                    except json.JSONDecodeError:
+                        match = re.search(r'\{.*\}', response.text, re.DOTALL)
+                        if match:
+                            data = json.loads(match.group())
+                            print(f"🤖 [Gemini 호출 성공 (정규식 파싱)] 모델: {model}")
+                            return data
+            except Exception as e:
+                last_error = e
+                err_msg = str(e)
+                if "503" in err_msg or "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg:
+                    print(f"⚠️ [{model}] 쿼타/일시장해 ({err_msg[:40]}...) → 다음 모델로 폴백...")
+                else:
+                    print(f"⚠️ [{model}] 호출 에러: {err_msg[:50]} → 다음 모델로 폴백...")
+                continue
+                
+        raise ValueError(f"All models in chain ({self.model_chain}) failed. Last error: {last_error}")
