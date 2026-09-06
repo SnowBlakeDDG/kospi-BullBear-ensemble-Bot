@@ -87,6 +87,15 @@ gcloud scheduler jobs update http g-ensemble-bot-job `
 - **현상**: 로컬 파일 시스템에 토큰이나 임시 데이터 저장 시 에러 발생.
 - **대응**: GCP 환경(`K_SERVICE` 존재 시)에서는 반드시 `/tmp` 경로를 사용하도록 코드 내 분기 처리 적용.
 
+### 4. Artifact Registry 취약점 스캐닝 과금 차단
+- **현상**: Python 3.14 마이그레이션 배포 후 Cloud Run/Artifact Registry에서 취약점 자동 검사로 인한 유료 과금 발생.
+- **원인**: `containerscanning.googleapis.com` 및 `containeranalysis.googleapis.com`이 활성화되어 이미지 푸시 시 자동 검사 발생. 검출된 10건(Critical 1, High 7, Med 2)은 Google Buildpack 내부 런처(`/cnb/lifecycle/launcher`)의 Go 1.26.5 런타임 CVE임.
+- **대응**: `gcloud services disable containerscanning.googleapis.com containeranalysis.googleapis.com --force`로 비활성화하여 Always Free 티어 보호 및 추가 과금 원천 차단.
+
+### 5. 06시 레거시 토큰 스케줄러 완전 퇴역 (DEPRECATED)
+- **현상**: 2026-04-24 배포 잔재인 `g-ensemble-bot-token-job`(06:00 KST)이 남아있어 매일 아침 6시에 Cloud Functions를 호출하여 전체 장전 리포트가 발송되는 문제 발생.
+- **대응**: `gcloud scheduler jobs delete g-ensemble-bot-token-job` 완전 삭제, `main.py`에 비인가 경로(`/kis_token_handler`) 410 Gone 차단 가드레일 추가, `deploy.ps1`에 레거시 스케줄러 자동 정리 로직 탑재.
+
 ## 📜 배포 이력 (Deployment History)
 
 | 날짜 | 버전 레이블 (Version Label) | 변경 사항 및 비고 |
@@ -101,6 +110,8 @@ gcloud scheduler jobs update http g-ensemble-bot-job `
 | 2026-08-17 | feat-yt-metadata-v1 | **유튜브 역지표 고도화**: 게시일자 KST 배지(D-Day) 추출, 2~3개 핵심 요약 불릿 분할, AI Overview 폴백 도입. |
 | 2026-08-17 | feat-discord-ui-v2 | **다중 모델 폴백(3.7→3.6→3.5→2.5) 및 디스코드 리포트 페르소나/UI 고도화**. |
 | 2026-08-17 | feat-algorithm-v1-9 | **v1.9 알고리즘 및 V/O 초단기 수급 동적 폴백**: SOXX 반도체 지수 통합 및 변동성 폭증 시 실시간 수급 70% 집중. |
+| 2026-09-06 | fix-infra-cost-guard-v1 | **GCP 과금 차단 및 06시 레거시 잡 완전 퇴역**: 유료 스캐닝 API 비활성화, 06시 스케줄러 영구 삭제 및 410 차단 가드레일 구축. |
+| 2026-09-06 | feat-model-3-8-flash-v1 | **AI 모델 업그레이드**: 주력 `gemini-3.8-flash`, 5단계 순차 폴백 체인(`3.8`→`3.7`→`3.6`→`3.5`→`2.5`) 구축. |
 
 ## 🔀 GitHub Actions 운영 가이드 (2026-07-12~ / 비활성화: 2026-07-25)
 

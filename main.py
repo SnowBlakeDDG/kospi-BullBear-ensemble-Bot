@@ -100,8 +100,15 @@ def main(dry_run=False):
 
 # GCP Cloud Functions Entry Point (09:10 KST 정기 실행)
 def gensemble_handler(request):
-    """GCP Cloud Functions (2nd Gen) 단일 엔트리포인트"""
-    print("--- [09:10 KST] G-ensemble Cloud Function Triggered ---")
+    """GCP Cloud Functions (2nd Gen) 단일 엔트리포인트 (09:10 KST 정기 실행)"""
+    # 06시 레거시 토큰 핸들러 등 퇴역된 경로 호출 영구 차단 (410 Gone)
+    req_path = getattr(request, 'path', '/') or '/'
+    if 'token' in req_path or 'kis_token_handler' in req_path:
+        msg = f"⚠️ [DEPRECATED] Path '{req_path}' is permanently deprecated. KIS token is issued in-memory during 09:10 KST analysis."
+        print(msg)
+        return msg, 410
+
+    print(f"--- [09:10 KST] G-ensemble Cloud Function Triggered (Path: {req_path}) ---")
     try:
         main(dry_run=False)
         return "Success", 200

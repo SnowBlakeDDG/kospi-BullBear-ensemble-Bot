@@ -8,13 +8,13 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class YTAnalyzer:
-    def __init__(self, model_name='gemini-3.7-flash'): 
+    def __init__(self, model_name='gemini-3.8-flash'): 
         self.api_key = os.getenv('GEMINI_API_KEY')
         self.client = genai.Client(api_key=self.api_key) if self.api_key else None
         
-        # 모델 우선순위 체인: 3.7 -> 3.6 -> 3.5 -> 2.5
+        # 모델 우선순위 체인: 3.8 -> 3.7 -> 3.6 -> 3.5 -> 2.5
         configured_model = os.getenv('GEMINI_MODEL', model_name)
-        candidates = [configured_model, 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-2.5-flash']
+        candidates = [configured_model, 'gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-2.5-flash']
         # 순서 유지 중복 제거
         self.model_chain = list(dict.fromkeys(candidates))
         self.channel_url = 'https://www.youtube.com/@moneydo/videos'

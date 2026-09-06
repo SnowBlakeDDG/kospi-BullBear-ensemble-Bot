@@ -82,6 +82,14 @@ try {
         --schedule="10 9 * * *" `
         --time-zone="Asia/Seoul"
 
+    # [가드레일] 과거 레거시 06:00 토큰 잡 자동 감지 및 영구 삭제
+    $legacyJob = "$FunctionName-token-job"
+    $checkLegacy = gcloud scheduler jobs list --location=$Region --filter="name:$legacyJob" --format="value(ID)"
+    if ($checkLegacy) {
+        Write-Host "🧹 [가드레일] 퇴역된 레거시 스케줄러($legacyJob) 감지됨. 자동 삭제합니다..." -ForegroundColor Yellow
+        gcloud scheduler jobs delete $legacyJob --location=$Region --quiet
+    }
+
     Write-Host "✅ 배포 및 스케줄러 동기화 완료!" -ForegroundColor Cyan
 }
 finally {

@@ -5,18 +5,19 @@
 - **주요 경로**: `D:\G-ensemble`
 - **배포 환경**: GCP Cloud Run (Cloud Scheduler 매일 09:10 KST 정기 실행)
 
-## 🛠 현재 시스템 상태 (2026-08-16 업데이트)
+## 🛠 현재 시스템 상태 (2026-09-06 업데이트)
 ### 1. AI 모델 및 라이브러리
 - **SDK**: `google-genai` 최신 버전 적용.
-- **주력 모델**: `gemini-3.7-flash` (폴백: `gemini-3.6-flash`).
+- **주력 모델**: `gemini-3.8-flash` (5단계 폴백 체인: `3.8-flash` → `3.7-flash` → `3.6-flash` → `3.5-flash` → `2.5-flash`).
 - **런타임**: Python 3.14 호환 완료.
 - **데이터 정합성**: Holiday/Bullet 감지 로직 구현 완료.
 
 ### 2. 배포 환경
-- **실행 환경**: **GCP Cloud Run (Always Free 티어)** — Cloud Scheduler(`09:10 KST`) 단일 정기 실행.
+- **실행 환경**: **GCP Cloud Run (Always Free 티어)** — Cloud Scheduler(`09:10 KST`) 단일 정기 실행 (`g-ensemble-bot-job`).
+- **06시 토큰 잡 완전 퇴역**: KIS 토큰은 09:10 실행 시 인메모리로 발급. 과거 06:00 잡(`g-ensemble-bot-token-job`)은 영구 삭제됨 (재생성 금지).
+- **Artifact Registry 과금 방지**: `containerscanning`/`containeranalysis` API 비활성화 유지 (Always Free 보호).
 - **GitHub Actions**: cron 스케줄 비활성화 (2026-07-25). `workflow_dispatch`(수동)만 유지.
 - **GitHub**: 버전 관리(소스코드 관리) 전용.
-- KIS 토큰은 매 실행 시 신규 발급 (별도 갱신 잡 불필요).
 
 ## 🚀 배포 및 인프라 정책
 - **표준 절차**: 모든 배포는 `docs/DEPLOYMENT.md`에 명시된 표준 프로세스를 반드시 준수할 것.

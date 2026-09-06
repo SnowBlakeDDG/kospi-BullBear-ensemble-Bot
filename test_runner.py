@@ -51,10 +51,10 @@ def run_fetcher_tests():
         return False
 
 def run_model_tests():
-    print("\n[3/3] 🤖 Gemini 3.7 Flash 모델 추론 테스트 실행...")
+    print("\n[3/3] 🤖 Gemini 3.8 Flash 모델 추론 테스트 실행...")
     try:
         from models.yt_analyzer import YTAnalyzer
-        analyzer = YTAnalyzer(model_name='gemini-3.7-flash')
+        analyzer = YTAnalyzer(model_name='gemini-3.8-flash')
         
         # 1. AI Overview 폴백 검증
         fallback_res = analyzer.analyze_sentiment("dummy_id")
@@ -77,11 +77,11 @@ def main():
     print("=" * 60)
 
     results = []
-    results.append(("WeightEngine v1.8", run_weight_engine_tests()))
+    results.append(("WeightEngine v1.9", run_weight_engine_tests()))
     
     if not args.quick:
         results.append(("Data Fetchers", run_fetcher_tests()))
-        results.append(("Gemini 3.7 Model", run_model_tests()))
+        results.append(("Gemini 3.8 Model", run_model_tests()))
 
     print("\n" + "=" * 60)
     print("📊 종합 테스트 결과 요약:")

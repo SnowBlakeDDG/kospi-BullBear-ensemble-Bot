@@ -92,16 +92,38 @@ class SDFetcher(BaseFetcher):
                 if res.status_code == 200:
                     output = res.json().get('output', [])
                     return output[0] if isinstance(output, list) and output else output
+                elif res.status_code == 401:
+                    print(f"⚠️ KIS [{market_code}] 토큰 만료(401) 감지. 캐시 삭제 후 재발급 시도...")
+                    if os.path.exists(self.token_file):
+                        try: os.remove(self.token_file)
+                        except: pass
+                    new_token = self._get_access_token()
+                    if new_token:
+                        headers["authorization"] = f"Bearer {new_token}"
                 else:
                     print(f"⚠️ KIS [{market_code}] HTTP {res.status_code} (시도 {attempt+1}/3)")
             except Exception as e:
                 print(f"⚠️ KIS [{market_code}] 에러 (시도 {attempt+1}/3): {e}")
             
             if attempt < 2:
-                time.sleep(2 * (attempt + 1))  # 2초, 4초
+                wait_sec = 2 * (attempt + 1)
+                time.sleep(wait_sec)
         
         print(f"❌ KIS [{market_code}] 데이터 수집 최종 실패")
         return {}
+
+    @staticmethod
+    def _safe_to_int(val, default=0):
+        """실수형 문자열('-19496.2'), 콤마, 공백, None 등을 안전하게 int로 변환"""
+        if val is None:
+            return default
+        try:
+            s = str(val).strip().replace(',', '')
+            if not s:
+                return default
+            return int(round(float(s)))
+        except (ValueError, TypeError):
+            return default
 
     def fetch(self, kr_holidays={}):
         data = {
@@ -128,17 +150,19 @@ class SDFetcher(BaseFetcher):
 
         token = self._get_access_token()
         if not token:
+            print("⚠️ [SDFetcher] 토큰 부재로 수급 데이터 기본값(0) 반환")
             return data
 
         # 1. 코스피 현물 (KSP / 0001)
         spot = self._fetch_trend(token, "KSP", "0001")
         # KIS API 대금 단위는 '백만원' 기준인 경우가 많으므로 확인 필요.
-        # 테스트 결과 -19,496.2억 형태였으므로 int() 변환 시 억 단위 유지됨.
-        data['individual'] = int(spot.get('prsn_ntby_tr_pbmn', 0))
-        data['foreign'] = int(spot.get('frgn_ntby_tr_pbmn', 0))
+        # 실수형 문자열("-19496.2") 및 빈 문자열 안전 파싱
+        data['individual'] = self._safe_to_int(spot.get('prsn_ntby_tr_pbmn', 0))
+        data['foreign'] = self._safe_to_int(spot.get('frgn_ntby_tr_pbmn', 0))
 
         # 2. 코스피 200 선물 (K2I / F001)
         futures = self._fetch_trend(token, "K2I", "F001")
-        data['foreign_futures'] = int(futures.get('frgn_ntby_tr_pbmn', 0))
+        data['foreign_futures'] = self._safe_to_int(futures.get('frgn_ntby_tr_pbmn', 0))
 
+        print(f"📊 [SDFetcher] 수집 완료: 개인 {data['individual']:,}억 | 외인 {data['foreign']:,}억 | 외인선물 {data['foreign_futures']:,}억")
         return data
